@@ -13,7 +13,7 @@ if "matches" not in st.session_state:
 if "tournament_started" not in st.session_state:
     st.session_state["tournament_started"] = False
 
-# Sistema de persistencia automática en la URL
+# Sistema de persistencia automática ultraseguro en la URL
 def save_to_url():
     try:
         state_data = {
@@ -22,7 +22,8 @@ def save_to_url():
             "tournament_started": st.session_state.get("tournament_started", False)
         }
         json_str = json.dumps(state_data)
-        b64_str = base64.b64encode(json_str.encode()).decode()
+        # Usamos urlsafe para evitar errores con caracteres especiales en el navegador
+        b64_str = base64.urlsafe_b64encode(json_str.encode()).decode()
         st.query_params["state"] = b64_str
     except Exception:
         pass
@@ -31,11 +32,19 @@ def load_from_url():
     if "state" in st.query_params and not st.session_state.get("loaded_from_url", False):
         try:
             b64_str = st.query_params["state"]
-            json_str = base64.b64decode(b64_str.encode()).decode()
+            json_str = base64.urlsafe_b64decode(b64_str.encode()).decode()
             state_data = json.loads(json_str)
             st.session_state["players"] = state_data.get("players", [])
             st.session_state["matches"] = state_data.get("matches", [])
             st.session_state["tournament_started"] = state_data.get("tournament_started", False)
+            
+            # Sincronizar los widgets con los datos recuperados
+            for m in st.session_state["matches"]:
+                m_id = m["id"]
+                st.session_state[f"s1_{m_id}"] = m["score1"]
+                st.session_state[f"s2_{m_id}"] = m["score2"]
+                st.session_state[f"st_{m_id}"] = m["status"]
+                
             st.session_state["loaded_from_url"] = True
         except Exception:
             pass
@@ -59,7 +68,6 @@ if not st.session_state["tournament_started"]:
         else:
             st.session_state["players"] = names
             
-            # Generador de partidos optimizado para Americano Individual (100% rotación)
             generated_matches = []
             match_id = 1
             
@@ -88,6 +96,13 @@ if not st.session_state["tournament_started"]:
 
             st.session_state["matches"] = generated_matches
             st.session_state["tournament_started"] = True
+            
+            # Inicializar keys de los widgets
+            for m in generated_matches:
+                st.session_state[f"s1_{m['id']}"] = 0
+                st.session_state[f"s2_{m['id']}"] = 0
+                st.session_state[f"st_{m['id']}"] = "Programado"
+
             save_to_url()
             st.rerun()
 
@@ -123,7 +138,7 @@ else:
             with col4:
                 new_status = st.selectbox("Estado", ["Programado", "En juego", "Finalizado"], index=["Programado", "En juego", "Finalizado"].index(status), key=f"st_{match['id']}")
             
-            # Actualizar datos y forzar actualización inmediata de la URL
+            # Actualizar datos si cambian y forzar guardado en URL
             if new_score1 != match["score1"] or new_score2 != match["score2"] or new_status != match["status"]:
                 st.session_state["matches"][idx]["score1"] = new_score1
                 st.session_state["matches"][idx]["score2"] = new_score2
